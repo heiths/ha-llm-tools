@@ -1,0 +1,19 @@
+name: "HA LLM Tools (Claude)"
+description: "Claude Code + rg/jq/yq tools for YAML work under /config"
+version: "0.1.0"
+slug: ha_llm_tools
+init: false
+arch:
+  - aarch64
+  - amd64
+  - armv7
+startup: services
+boot: auto
+map:
+  - config:rw
+  - ssl
+options:
+  default_model: "default"
+schema:
+  default_model: list(default|opus|sonnet|opus-plan)?
+image: "ghcr.io/heiths/ha-llm-tools-{arch}"

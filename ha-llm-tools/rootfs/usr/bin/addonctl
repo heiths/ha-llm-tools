@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+set -e
+
+# Default to /config directory
+BASE_DIR="${BASE_DIR:-/config}"
+
+usage() {
+    cat <<EOF
+addonctl - HA LLM Tools CLI wrapper
+
+Usage:
+    addonctl claude "<prompt>" [--model <id>] [--in <path>] [--out <path>]
+    addonctl search "<pattern>" [--ext yaml|json]
+    addonctl get <yaml_path> <file>
+    addonctl set <yaml_path> <value> <file>
+    addonctl diff <fileA> <fileB>
+    addonctl --help
+
+Commands:
+    claude    Run Claude Code with a prompt
+    search    Search files using ripgrep
+    get       Get YAML value using yq
+    set       Set YAML value using yq
+    diff      Show unified diff between files
+
+Examples:
+    addonctl claude "summarize configuration.yaml"
+    addonctl search "sensor" --ext yaml
+    addonctl get .homeassistant.name /config/configuration.yaml
+    addonctl set .logger.default '"debug"' /config/configuration.yaml
+    addonctl diff /config/automations.yaml /config/automations.yaml.backup
+
+EOF
+}
+
+# Claude command
+cmd_claude() {
+    local prompt="$1"
+    shift
+
+    local model=""
+    local in_file=""
+    local out_file=""
+    local cwd="/config"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --model)
+                model="$2"
+                shift 2
+                ;;
+            --in)
+                in_file="$2"
+                shift 2
+                ;;
+            --out)
+                out_file="$2"
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+
+    # Add prompt with file context if specified
+    if [[ -n "$in_file" ]]; then
+        prompt="$prompt (file: $in_file)"
+    fi
+
+    if [[ -n "$out_file" ]]; then
+        prompt="$prompt (write output to: $out_file)"
+    fi
+
+    # Execute claude safely without eval
+    cd "$cwd" || exit 1
+
+    if [[ -n "$model" ]]; then
+        # Map model names to claude /model command
+        case "$model" in
+            opus|opus-4.1)
+                claude /model 2 "$prompt"
+                ;;
+            sonnet|sonnet-4)
+                claude /model 3 "$prompt"
+                ;;
+            opus-plan)
+                claude /model 4 "$prompt"
+                ;;
+            default)
+                claude "$prompt"
+                ;;
+            *)
+                echo "Unknown model: $model" >&2
+                exit 1
+                ;;
+        esac
+    else
+        claude "$prompt"
+    fi
+}
+
+# Search command
+cmd_search() {
+    local pattern="$1"
+    local ext=""
+    shift
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --ext)
+                ext="$2"
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+
+    if [[ -n "$ext" ]]; then
+        rg --glob "*.${ext}" "$pattern" "$BASE_DIR"
+    else
+        rg "$pattern" "$BASE_DIR"
+    fi
+}
+
+# Get YAML value
+cmd_get() {
+    local path="$1"
+    local file="$2"
+
+    if [[ ! -f "$file" ]]; then
+        echo "Error: File not found: $file" >&2
+        exit 1
+    fi
+
+    yq eval "$path" "$file"
+}
+
+# Set YAML value
+cmd_set() {
+    local path="$1"
+    local value="$2"
+    local file="$3"
+
+    if [[ ! -f "$file" ]]; then
+        echo "Error: File not found: $file" >&2
+        exit 1
+    fi
+
+    # Use atomic write (temp file + move)
+    local tmpfile="${file}.tmp.$$"
+    yq eval "$path = $value" "$file" > "$tmpfile"
+    mv "$tmpfile" "$file"
+    echo "Updated $file"
+}
+
+# Diff command
+cmd_diff() {
+    local file1="$1"
+    local file2="$2"
+
+    if [[ ! -f "$file1" ]]; then
+        echo "Error: File not found: $file1" >&2
+        exit 1
+    fi
+
+    if [[ ! -f "$file2" ]]; then
+        echo "Error: File not found: $file2" >&2
+        exit 1
+    fi
+
+    diff -u "$file1" "$file2" || true
+}
+
+# Main command dispatcher
+case "${1:-}" in
+    claude)
+        shift
+        cmd_claude "$@"
+        ;;
+    search)
+        shift
+        cmd_search "$@"
+        ;;
+    get)
+        shift
+        cmd_get "$@"
+        ;;
+    set)
+        shift
+        cmd_set "$@"
+        ;;
+    diff)
+        shift
+        cmd_diff "$@"
+        ;;
+    --help|-h|"")
+        usage
+        ;;
+    *)
+        echo "Unknown command: $1"
+        echo "Run 'addonctl --help' for usage"
+        exit 1
+        ;;
+esac
