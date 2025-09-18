@@ -12,7 +12,8 @@ RUN apk add --no-cache \
     git \
     openssh-client \
     ca-certificates \
-    openssl
+    openssl \
+    tmux
 
 # Install yq (static binary)
 ARG BUILD_ARCH
@@ -42,5 +43,9 @@ RUN set -x && \
 # Copy root filesystem
 COPY rootfs /
 
+# Copy tmux config
+COPY tmux.conf /root/.tmux.conf
+
 # Make scripts executable
-RUN chmod +x /usr/bin/start.sh /usr/bin/addonctl
+RUN chmod +x /usr/bin/start.sh /usr/bin/addonctl && \
+    chmod +x /etc/services.d/llm/run
