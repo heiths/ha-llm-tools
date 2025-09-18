@@ -10,7 +10,9 @@ RUN apk add --no-cache \
     jq \
     ripgrep \
     git \
-    openssh-client
+    openssh-client \
+    ca-certificates \
+    openssl
 
 # Install yq (static binary)
 ARG BUILD_ARCH
@@ -25,10 +27,17 @@ RUN set -x && \
     curl -sSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${YQ_ARCH}" -o /usr/local/bin/yq && \
     chmod +x /usr/local/bin/yq
 
-# Install Claude Code using official installer
+# Install Claude Code using official installer (skip on unsupported architectures)
 ENV USE_BUILTIN_RIPGREP=0
-RUN curl -fsSL https://claude.ai/install.sh | bash && \
-    ln -sf /root/.local/bin/claude /usr/local/bin/claude
+RUN set -x && \
+    if [ "${BUILD_ARCH}" != "armv7" ]; then \
+        curl -fsSL https://claude.ai/install.sh | bash && \
+        ln -sf /root/.local/bin/claude /usr/local/bin/claude; \
+    else \
+        echo "Claude Code not available for armv7, skipping installation"; \
+        echo '#!/bin/sh\necho "Claude Code not available for armv7 architecture"' > /usr/local/bin/claude && \
+        chmod +x /usr/local/bin/claude; \
+    fi
 
 # Copy root filesystem
 COPY rootfs /
