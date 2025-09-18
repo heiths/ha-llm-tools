@@ -1,6 +1,6 @@
 name: "HA LLM Tools (Claude)"
 description: "Claude Code + rg/jq/yq tools for YAML work under /config"
-version: "0.1.0"
+version: "0.1.1"
 slug: ha_llm_tools
 init: false
 arch:
